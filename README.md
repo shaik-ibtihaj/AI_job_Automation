@@ -2,9 +2,9 @@
 
 AI-Job-Automation is a terminal-started Python application for discovering relevant LinkedIn jobs through an authorized data-access method, matching them to my candidate profile and preferences, and preparing applications for my review.
 
-## Planned features
+## Workflow
 
-- **Discover and match LinkedIn jobs:** Use authorized job data with `data/candidate_profile.json` and `config/job_preferences.json`.
+- **Intake and match LinkedIn jobs:** Process local JSON or records delivered by a separately authorized source, using `data/candidate_profile.json` and `config/job_preferences.json`. Live discovery is not connected.
 - **Deduplicate and classify:** Identify unique postings and confirm whether their application method is Easy Apply, external, or unknown.
 - **Prepare Easy Apply for review:** Use the resume and confirmed, evidence-supported candidate information in a terminal review workflow for submission on LinkedIn. No separate Easy Apply CSV is created.
 - **Export external applications:** Create or update the single file `output/external_apply_jobs.csv` with verified application links.
@@ -13,9 +13,63 @@ Application-response tracking, such as interviews, rejections, offers, and email
 
 ## Project status
 
-This stage provides local PDF text extraction, candidate profile storage, job preferences, and configuration validation. Job search and application submission are not implemented.
+This stage provides a working local job-processing engine alongside the existing PDF parser, candidate profile, preferences, and tests. It validates intake, checks resume evidence, explains relevance, deduplicates postings, routes application methods, and writes private review outputs. It performs no network requests, scraping, browser automation, submissions, or response tracking.
 
-The required workflow below is a specification for future implementation. This documentation update installs no packages, creates no job exports, and adds no browser automation. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the implementation sequence and acceptance criteria.
+The workflow below describes the full intended system; the local processing portion is now implemented. The existing [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) remains design context for future authorized source integration. No new packages are needed for job processing; it uses Python's standard library.
+
+## Run the working pipeline from Windows Command Prompt
+
+```bat
+cd /d C:\Users\shaik\AI_job_Automation
+.venv\Scripts\activate.bat
+python -m src.job_pipeline --input data/sample_jobs.json
+```
+
+Activation is optional; the equivalent command is:
+
+```bat
+.venv\Scripts\python.exe -m src.job_pipeline --input data/sample_jobs.json
+```
+
+The sample contains six fictional records covering all three application methods, one duplicate, a missing application URL, and an excluded senior role. Its jobs and URLs are synthetic and must not be treated as real opportunities. The sample produces two external rows, one Easy Apply review item, and one unknown-method item. No sample URLs are fetched.
+
+For real, authorized input, use a different private JSON file under `data/`:
+
+```bat
+python -m src.job_pipeline --input data/authorized_jobs.json
+python -m src.job_pipeline --input data/authorized_jobs.json --min-score 60
+python -m unittest discover -s tests -v
+```
+
+Input may be a JSON list or an object containing a `jobs` list. Each record needs nonempty string fields `job_title`, `company_name`, and `job_description`, plus a string `location` (blank means unknown). `application_type` is `easy_apply`, `external`, or `unknown`; omitted method data remains unknown. `linkedin_job_url` and `application_url` may be blank, missing, or null; supplied values must be valid HTTP(S) URLs, and a LinkedIn URL must identify a `/jobs/view/` posting. No URL is constructed or fetched.
+
+Optional `source` and `job_id` strings provide a stable, source-scoped identity. Optional `screening_questions` is a list of question strings; all answers remain null. Missing questions mean unknown, not that the application has no questions. See `data/sample_jobs.json` for a complete synthetic example. `process_jobs` in `src/job_pipeline.py` also accepts records from an adapter; the adapter is responsible for authorized provenance and callers must verify profile integrity with `verify_profile_source` first.
+
+## Match explanations and review eligibility
+
+Scores range from 0 to 100: resume-evidenced skills contribute 8 points each, capped at 40; a preferred role in the title contributes 30; a preferred seniority marker contributes 15; and an explicit preferred country in the location contributes 15. Skill quotes and the resume fingerprint are checked locally. This verifies source support, not the truth of self-reported qualifications. Preferred keywords do not create candidate skills, and no experience total is calculated.
+
+An Easy Apply job enters the review queue only when it meets the score threshold (default 50), matches a preferred role and explicit preferred country, and has no excluded senior title. A city-only or unrestricted "Remote" location does not establish a preferred country. Senior/Lead/Principal/Director roles require manual exception review and are not automatically queued even with a high score. Other missing requirements, uncertain authorization, language proficiency, and open profile review items remain visible. `eligible_for_review` never means confirmed eligibility or readiness to submit.
+
+All validated external jobs are exported for manual consideration, including low-scoring ones; their score and cautions appear in the terminal. Unknown-method jobs go to a separate JSON review list regardless of score. This basic keyword score is not a claim that every job requirement is satisfied.
+
+## Generated output structures
+
+```text
+output/
+|-- external_apply_jobs.csv          # The only CSV; persistent external-job list
+|-- easy_apply_review_queue.json     # Eligible Easy Apply jobs from the current input
+|-- unknown_application_jobs.json   # Unknown/conflicting methods from the current input
+`-- external_job_ids.json           # CSV row identities and integrity fingerprint
+```
+
+Both review JSON files contain `schema_version` and `jobs`. Each job entry contains `job`, `match`, `resume_path`, `profile_review_items`, `unanswered_screening_questions`, and `review_state`. `match` contains the score/components, evidence-backed skill matches, explanations, manual review flags, and `eligible_for_review`; employment eligibility remains `not_determined`. Answers are null and no submitted state is generated. The queues are replaced with snapshots of each input batch; include all desired current jobs in that batch. Relevant profile questions remain unresolved until you confirm them.
+
+The CSV accumulates external jobs across runs, deduplicating source IDs and normalized posting URLs and preserving the earliest `date_found`. Missing new URLs do not erase previously supplied URLs. A posting reclassified as Easy Apply or unknown is removed from the external CSV. Shared company portals do not alone establish that two postings are the same. Jobs without any stable identifier or URL can only be compared as exact-record duplicates.
+
+`external_job_ids.json` contains `schema_version`, `csv_sha256`, `row_identities`, and `purpose`. This private identity metadata enables repeat-run deduplication even for source IDs without URLs; it is not an application tracker or another job export. Keep it with the CSV. A mismatched CSV/index pair fails explicitly rather than silently overwriting data. Each output replacement is atomic; no extra CSV copies are produced. Do not edit the CSV/index pair independently; change source input and rerun instead.
+
+The existing `data/` and `output/` ignore rules exclude sample intake, real intake, and generated application records from Git. Explicit ignore rules also cover the generated output filenames outside their normal folder.
 
 ## Required workflow
 
@@ -26,7 +80,7 @@ The required workflow below is a specification for future implementation. This d
 5. For jobs confirmed to require an external application, create or update only `output/external_apply_jobs.csv`. These jobs are handed off for application on company websites; this workflow does not submit external applications.
 6. Review before submission. Preparation and opening a form do not establish that an application was submitted. A platform confirmation is required before reporting submission success; absent confirmation, report the outcome as unconfirmed. Do not implement application-response tracking.
 
-The future terminal entry point will be specified during implementation. The currently runnable commands below are the resume parser, profile summary, and tests.
+The terminal entry point is `python -m src.job_pipeline --input data/sample_jobs.json`. Live source integration and any platform submission remain future work.
 
 ## External application CSV contract
 
@@ -53,17 +107,17 @@ Select and validate a source that explicitly permits automated discovery of Link
 
 LinkedIn describes restrictions on third-party scraping and website automation in its [automated activity guidance](https://www.linkedin.com/help/linkedin/answer/a1340567/automated-activity-on-linkedin?lang=en). Its documented [Job Posting API](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview) supports authorized posting integrations; it must not be assumed to provide applicant-side job search or Easy Apply submission access.
 
-Record discovery permissions separately from any permission to interact with Easy Apply. If a suitable source is unavailable, report the missing capability and pause live discovery; an explicitly permitted local import may support development but does not fulfill automatic discovery. Do not work around restrictions, captchas, or access controls. No accounts are connected during this documentation stage.
+Record discovery permissions separately from any permission to interact with Easy Apply. If a suitable source is unavailable, report the missing capability and pause live discovery; the working local import does not fulfill automatic discovery. Do not work around restrictions, captchas, or access controls. No accounts are connected by the local pipeline.
 
 ## Project structure
 
 ```text
 AI_job_Automation/
-|-- src/                 # resume_parser.py and profile_config.py
+|-- src/                 # resume_parser.py, profile_config.py, job_pipeline.py
 |-- config/              # job_preferences.json
 |-- data/                # Private job and application data (ignored by Git)
 |-- resumes/             # Private resume files (ignored by Git)
-|-- output/              # Future external_apply_jobs.csv; private and ignored
+|-- output/              # Single external CSV, JSON review queues, identity index; ignored
 |-- tests/               # Application tests
 |-- .venv/               # Local Python virtual environment (ignored by Git)
 |-- .gitignore
@@ -138,7 +192,7 @@ Extraction does not overwrite the curated candidate profile. If the PDF changes,
 
 ## Job preferences
 
-`config/job_preferences.json` stores the requested roles, countries, Junior/Entry-level/Graduate seniority, work types, and keywords. Senior, Lead, Principal, and Director roles are excluded unless actual requirements genuinely match resume-supported qualifications and receive manual review. Visa sponsorship eligibility and language proficiency are not assumed. These are stored policies only; no job-search engine is implemented.
+`config/job_preferences.json` stores the requested roles, countries, Junior/Entry-level/Graduate seniority, work types, and keywords. The current basic matcher scores roles, source-evidenced skills, seniority, and explicit country mentions. Senior, Lead, Principal, and Director roles require manual exception review. Visa sponsorship eligibility and language proficiency are not assumed. Work types remain available for review but are not automatically scored. Live job discovery is not connected.
 
 ## Tests and privacy checks
 
@@ -149,6 +203,8 @@ git ls-files
 ```
 
 Tests use synthetic PDFs and candidate data, never private resume content. They cover text extraction, multiple pages, blank/scanned-style pages, malformed files, encryption, configuration loading, and policies against unsupported eligibility/language assumptions. PDF extraction tests are explicitly skipped if `pypdf` is unavailable.
+
+Pipeline tests additionally cover scoring and evidence, exclusions, normalized identities and transitive duplicates, classification conflicts, all output routes, missing URLs/questions, repeat-run updates, preserved discovery dates, CSV quoting, invalid intake, and corrupted output/index handling.
 
 Resume processing runs locally. There are no resume uploads, external account connections, LinkedIn integrations, or application submissions. Installing dependencies downloads packages without sending the resume.
 

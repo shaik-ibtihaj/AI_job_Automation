@@ -35,6 +35,10 @@ htmlcov/
 **/candidate_profile.json
 **/resume_extraction.json
 **/resume_text.*
+**/external_apply_jobs.csv
+**/easy_apply_review_queue.json
+**/unknown_application_jobs.json
+**/external_job_ids.json
 /applications/
 /application_records/
 /secrets/
