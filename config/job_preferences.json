@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "roles": ["Data Engineer", "AI Engineer", "Software Engineer", "Full Stack Developer", "ML Engineer"],
+  "countries": ["Sweden", "Finland", "Norway", "Germany", "Poland"],
+  "seniority": ["Junior", "Entry-level", "Graduate"],
+  "work_types": ["On-site", "Hybrid", "Remote"],
+  "keywords": ["Python", "SQL", "ETL", "Data Engineering", "Machine Learning", "AI", "REST API", "Software Development"],
+  "seniority_exclusions": {
+    "titles": ["Senior", "Lead", "Principal", "Director"],
+    "exception": "Only consider when the actual requirements genuinely match resume-supported qualifications; flag for manual review.",
+    "manual_review_required_for_exception": true
+  },
+  "evidence_policy": {
+    "assume_visa_sponsorship_eligibility": false,
+    "assume_language_proficiency": false,
+    "unknown_requirements": "Flag for manual verification; do not infer eligibility or qualifications."
+  }
+}
