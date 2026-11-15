@@ -44,3 +44,17 @@ htmlcov/
 /secrets/
 *.pem
 *.key
+
+# Workflow approvals, session material, durable state and private run outputs
+/config/application_settings.json
+/config/*secrets*.json
+**/.workflow.lock
+**/.environment.lock
+**/workflow.sqlite3*
+**/last_run_report.*
+**/legacy_output_archive.json
+/sessions/
+/browser_profiles/
+**/storage_state*.json
+**/cookies*.json
+**/.job_pipeline_*.tmp

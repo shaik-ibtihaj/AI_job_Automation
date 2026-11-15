@@ -440,12 +440,18 @@ def main(argv: list[str] | None = None) -> int:
         preferences = load_job_preferences()
         resume_path = verify_profile_source(profile, PROJECT_ROOT)
         jobs = _read_json(args.input)
+        synthetic = isinstance(jobs, dict) and jobs.get("synthetic") is True
+        if not synthetic:
+            # Keep reusable matching/intake functions intact. Real CLI imports now
+            # share the durable workflow and its expanded external CSV contract.
+            from src.workflow import main as workflow_main
+            return workflow_main(["--input", str(args.input), "--dry-run", "--non-interactive", "--min-score", str(args.min_score)])
         if isinstance(jobs, dict):
             if jobs.get("synthetic") is True:
                 print("SYNTHETIC INPUT: sample jobs and URLs are fictional and are not fetched.")
             jobs = jobs.get("jobs")
         result = process_jobs(jobs, profile, preferences, resume_path=resume_path,
-                              output_dir=PROJECT_ROOT / "output", min_score=args.min_score)
+                              output_dir=PROJECT_ROOT / "output/fixtures/legacy_pipeline", min_score=args.min_score)
     except (JobPipelineError, ConfigurationError, OSError) as exc:
         print(f"Job processing failed: {exc}", file=sys.stderr)
         return 1
@@ -456,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{entry['job_title']} | {entry['company_name']} | {entry['application_type']} | relevance {match['score']}/100")
         for reason in match["explanation"] + match["manual_review_required"]:
             print(f"  {reason}")
-    print("Output: output/external_apply_jobs.csv, easy_apply_review_queue.json, unknown_application_jobs.json, external_job_ids.json")
+    print("Synthetic output only: output/fixtures/legacy_pipeline/ (isolated from live outputs).")
     print("Review only. No network requests, form answers, submissions, or response tracking performed.")
     return 0
 
